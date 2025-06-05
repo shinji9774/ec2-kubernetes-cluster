@@ -23,4 +23,7 @@ help: ## [common] show list
 #	@$(call _printhelp,develop)
 
 install: check-connection ## [install] setup server
-	@$(call _run_Playbook,install.yml,)
+	@$(call _run_Playbook,playbook_install.yml,)
+
+check-connection: ## [install,maintenance] check connection
+	@$(call _run_Playbook,install/playbook_check_connection.yml,)
