@@ -1,0 +1,17 @@
+---
+
+- name: Install kubelet, kubeadm
+  become: true
+  ansible.builtin.apt:
+    name:
+      - kubelet
+      - kubeadm
+    update_cache: true
+
+- name: Start kubelet
+  become: true
+  ansible.builtin.systemd:
+    name: kubelet
+    state: restarted
+    enabled: true
+    daemon_reload: true

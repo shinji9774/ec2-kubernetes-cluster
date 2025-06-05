@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template to create a Kubernetes cluster on Amazon EC2s
+
+Parameters:
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+  MyIP:
+    Description: IP address allowed to access EC2
+    Type: String
+  UserName:
+    Description: Username allowed to access EC2
+    Type: String
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.8.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-vpc
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  PubSub:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      VpcId: !Ref VPC
+      CidrBlock: 10.8.1.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-pub-sub-a
+
+  PubSubRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-pub-sub-a-rt
+
+  PubSubToInternet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PubSubRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+
+  AssoPubSubRT:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSub
+      RouteTableId: !Ref PubSubRT
+
+  ClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${AWS::StackName}-ec2-client-sg
+      GroupDescription: Enable SSH access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # ssh from home IP
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+        # ssh via EC2 Instance Connect
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 3.112.23.0/29
+
+  ClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${AWS::StackName}-ec2-cluster-sg
+      GroupDescription: Enable Cluster connections
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: "-1"
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: !GetAtt PubSub.CidrBlock
+
+  ClusterKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub "${AWS::StackName}-cluster-key"
+      KeyType: rsa
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ec2-instance-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub "${AWS::StackName}-ec2-instance-profile"
+      Roles:
+        - !Ref EC2InstanceRole
+
+  EC2InstanceRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-ec2-instance-policy"
+      Roles:
+        - !Ref EC2InstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeKeyPairs
+              - ssm:GetParameter
+            Resource: "*"
+
+  ControlPlaneInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a290015b99140cd1
+      InstanceType: t3.medium
+      KeyName: !Ref ClusterKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          PrivateIpAddress: "10.8.1.80"
+          GroupSet:
+            - !Ref ClusterSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-control-plane
+
+  WorkerNode1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a290015b99140cd1
+      InstanceType: t3.medium
+      KeyName: !Ref ClusterKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          PrivateIpAddress: "10.8.1.81"
+          GroupSet:
+            - !Ref ClusterSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-worker-node-1
+
+  WorkerNode2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a290015b99140cd1
+      InstanceType: t3.medium
+      KeyName: !Ref ClusterKeyPair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          PrivateIpAddress: "10.8.1.82"
+          GroupSet:
+            - !Ref ClusterSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-worker-node-2
+
+  ClientNode:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a290015b99140cd1
+      InstanceType: t3.small
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          SubnetId: !Ref PubSub
+          PrivateIpAddress: "10.8.1.88"
+          GroupSet:
+            - !Ref ClusterSecurityGroup
+            - !Ref ClientSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-client-node
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash -eu
+            export AWS_DEFAULT_REGION=${AWS::Region}
+            export DEBIAN_FRONTEND=noninteractive
+            echo "$(date +%Y%m%d-%H%M%S%z) Start init script"
+            apt-get update
+            apt-get upgrade -y
+            apt update
+            apt-get install -y curl make zip unzip python3 software-properties-common
+            add-apt-repository --yes --update ppa:ansible/ansible
+            apt-get install ansible
+            cd "$(mktemp -d)"
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+            mkdir -p /home/ubuntu/.ssh
+            aws ssm get-parameter --name /ec2/keypair/${KEYPAIR_ID} --with-decryption --query Parameter.Value --output text > /home/ubuntu/.ssh/id_rsa
+            chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+            chmod 700 /home/ubuntu/.ssh
+            chmod 600 /home/ubuntu/.ssh/id_rsa
+            rm -rf $(pwd)
+            echo "$(date +%Y%m%d-%H%M%S%z) End init script"
+          - KEYPAIR_ID: !GetAtt ClusterKeyPair.KeyPairId
+
+  UserRole:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-user
+      Users:
+        - !Ref UserName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:Describe*
+              - ec2:GetConsoleScreenshot
+              - ec2:GetPasswordData
+              - cloudformation:List*
+              - cloudformation:Describe*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+              - ec2-instance-connect:SendSSHPublicKey
+              - ec2-instance-connect:OpenTunnel
+            Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${ClientNode}
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+            Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${ControlPlaneInstance}
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+            Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${WorkerNode1}
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+            Resource: !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${WorkerNode2}
+          - Effect: Deny
+            Action:
+              - ec2:RunInstances
+              - ec2:TerminateInstances
+            Resource: "*"

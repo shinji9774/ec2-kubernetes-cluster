@@ -1,0 +1,16 @@
+[cluster:children]
+control
+workers
+
+[control]
+control-plane ansible_ssh_host=10.8.1.80
+
+[workers]
+worker1 ansible_ssh_host=10.8.1.81
+worker2 ansible_ssh_host=10.8.1.82
+
+[client]
+localhost ansible_connection=local
+
+[all:vars]
+ansible_ssh_user=ubuntu

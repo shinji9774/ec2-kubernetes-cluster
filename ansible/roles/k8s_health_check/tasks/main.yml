@@ -1,0 +1,17 @@
+---
+
+- name: Wait for all system pods to be running
+  ansible.builtin.shell: |
+    set -o pipefail
+    if ! kubectl get pods -A -o json | jq -e '
+      [ .items[] | select(
+          (.metadata.namespace == "kube-system" or .metadata.namespace == "kube-flannel")
+        ) | .status.phase ] | all(. == "Running")
+    '; then kubectl get pods -A; exit 1; fi
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  register: wait_for_all_pods_running
+  retries: 20
+  delay: 10
+  until: wait_for_all_pods_running.rc == 0
+  changed_when: false

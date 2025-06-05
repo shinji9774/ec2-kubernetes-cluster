@@ -1,0 +1,12 @@
+---
+
+- name: Get worker join command from control plane
+  ansible.builtin.set_fact:
+    worker_join_cmd: "{{ hostvars['control-plane']['worker_join_cmd'] }}"
+
+- name: Join worker node to the cluster
+  become: true
+  ansible.builtin.command: "{{ worker_join_cmd }} --ignore-preflight-errors=all"
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  changed_when: false

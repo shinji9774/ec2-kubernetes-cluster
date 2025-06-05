@@ -1,0 +1,62 @@
+---
+
+- name: Uninstall old container packages
+  become: true
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-doc
+      - docker-compose
+      - docker-compose-v2
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+
+- name: Add Docker gpg key
+  become: true
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/{{ linux_dist }}/gpg
+    state: present
+  vars:
+    linux_dist: "{{ ansible_distribution | lower }}"
+
+- name: Get architecture
+  become: true
+  ansible.builtin.command: "dpkg --print-architecture"
+  register: architecture
+  changed_when: false
+
+- name: Add Docker repository
+  become: true
+  ansible.builtin.apt_repository:
+    repo: deb [arch={{ architecture.stdout }}] https://download.docker.com/linux/{{ linux_dist }} {{ ansible_distribution_release }} stable
+    state: present
+  vars:
+    linux_dist: "{{ ansible_distribution | lower }}"
+
+- name: Install Docker
+  become: true
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Add user to docker group
+  become: true
+  ansible.builtin.user:
+    name: "{{ ansible_user_id }}"
+    groups: docker
+    append: true
+
+- name: Start docker
+  become: true
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+    enabled: true

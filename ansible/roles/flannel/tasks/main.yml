@@ -1,0 +1,7 @@
+---
+
+- name: Apply Flannel network addon
+  ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  changed_when: false

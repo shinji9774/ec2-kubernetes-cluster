@@ -1,0 +1,40 @@
+---
+
+- name: Setup common
+  hosts: all
+  roles:
+    - role: upgrade_pkgs
+    - role: install_common_pkgs
+    - role: k8s_repository
+    - role: kubectl
+    - role: disable_swap
+
+- name: Setup cluster
+  hosts: cluster
+  roles:
+    - role: docker_engine
+    - role: bridge_network
+    - role: k8s_system
+    - role: containerd
+
+- name: Setup control plane
+  hosts: control
+  roles:
+    - role: kubeadm_init
+    - role: kubeconfig
+
+- name: Setup worker nodes
+  hosts: workers
+  roles:
+    - role: kubeadm_join
+
+- name: Install Flannel CNI
+  hosts: control
+  roles:
+    - role: flannel
+    - role: k8s_health_check
+
+- name: Setup client node
+  hosts: client
+  roles:
+    - role: kubeconfig

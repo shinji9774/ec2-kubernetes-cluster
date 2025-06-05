@@ -1,0 +1,31 @@
+---
+
+- name: Create containerd config file
+  become: true
+  ansible.builtin.shell: containerd config dump > /etc/containerd/config.toml
+  changed_when: false
+
+- name: Enable containerd cri
+  become: true
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^(\s*disabled_plugins) = .*$'
+    replace: '\1 = []'
+    backup: true
+  register: enable_containerd_cri
+
+- name: Enable SystemdCgroup
+  become: true
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^(\s*SystemdCgroup) = .*$'
+    replace: '\1 = true'
+    backup: "{{ not enable_containerd_cri.changed }}"
+
+- name: Restart containerd
+  become: true
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted
+    enabled: true
+    daemon_reload: true

@@ -1,0 +1,39 @@
+---
+
+- name: Create kubectl directory
+  become: true
+  ansible.builtin.file:
+    path: "/home/ubuntu/.kube"
+    state: directory
+    owner: "ubuntu"
+    group: "ubuntu"
+    mode: "0700"
+
+- name: Copy kubeconfig
+  become: true
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/ubuntu/.kube/config"
+    owner: "ubuntu"
+    group: "ubuntu"
+    remote_src: true
+    mode: "0600"
+  when: inventory_hostname in groups['control']
+
+- name: Fetch kubeconfig from control plane
+  become: true
+  ansible.builtin.fetch:
+    src: "/home/ubuntu/.kube/config"
+    dest: "/home/ubuntu/.kube/config"
+    flat: true
+  when: inventory_hostname in groups['client']
+  delegate_to: "{{ groups['control'][0] }}"
+
+- name: Set permissions on kubeconfig
+  become: true
+  ansible.builtin.file:
+    path: "/home/ubuntu/.kube/config"
+    state: file
+    owner: "ubuntu"
+    group: "ubuntu"
+    mode: "0600"

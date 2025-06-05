@@ -1,0 +1,13 @@
+---
+
+- name: Install common packages
+  become: true
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+      - jq
+      - yq
+    update_cache: true

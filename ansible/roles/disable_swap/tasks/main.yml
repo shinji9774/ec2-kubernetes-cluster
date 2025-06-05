@@ -1,0 +1,14 @@
+---
+
+- name: Disable swap
+  become: true
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+  changed_when: false
+
+- name: Delete swap from fstab
+  become: true
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: "^([^#].*swap.*)$"
+    replace: '# \1'
