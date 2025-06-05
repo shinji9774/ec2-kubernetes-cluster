@@ -217,10 +217,8 @@ Resources:
             echo "$(date +%Y%m%d-%H%M%S%z) Start init script"
             apt-get update
             apt-get upgrade -y
-            apt update
-            apt-get install -y curl make zip unzip python3 software-properties-common
             add-apt-repository --yes --update ppa:ansible/ansible
-            apt-get install ansible
+            apt-get install -y curl make zip unzip python3 software-properties-common ansible
             cd "$(mktemp -d)"
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip
@@ -230,6 +228,7 @@ Resources:
             chown -R ubuntu:ubuntu /home/ubuntu/.ssh
             chmod 700 /home/ubuntu/.ssh
             chmod 600 /home/ubuntu/.ssh/id_rsa
+            echo "Created /home/ubuntu/.ssh/id_rsa"
             rm -rf $(pwd)
             echo "$(date +%Y%m%d-%H%M%S%z) End init script"
           - KEYPAIR_ID: !GetAtt ClusterKeyPair.KeyPairId
